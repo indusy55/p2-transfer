@@ -1,7 +1,7 @@
 import type { ChannelMessage, SignalPayload } from '../types.js';
 
-const BUFFER_HIGH_WATER = 4 * 1024 * 1024;
-const BUFFER_LOW_WATER = 512 * 1024;
+const BUFFER_HIGH_WATER = 64 * 1024 * 1024;
+const BUFFER_LOW_WATER = 16 * 1024 * 1024;
 
 type WebRtcHandlers = {
   onSignal: (payload: SignalPayload) => void;

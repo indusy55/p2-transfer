@@ -18,7 +18,7 @@ import type {
 } from '../types.js';
 import { formatBytes } from '../utils/format.js';
 
-const CHUNK_SIZE = 64 * 1024;
+const CHUNK_SIZE = 16 * 1024 * 1024;
 
 type TransferDirection = 'send' | 'receive';
 type TransferStatus = 'pending' | 'active' | 'paused' | 'complete' | 'rejected';
@@ -60,6 +60,7 @@ export class P2TransferApp extends LitElement {
   private isResetting = false;
   private activeSendId: string | null = null;
   private activeReceiveId: string | null = null;
+  private _lastMetaSave = 0;
 
   connectedCallback() {
     super.connectedCallback();
@@ -572,6 +573,7 @@ export class P2TransferApp extends LitElement {
     item.status = 'active';
     this.transfers = [...this.transfers];
     this.activeReceiveId = id;
+    this._lastMetaSave = 0;
 
     void this.initChunkStore(item);
     this.transfer.sendControl({ kind: 'ready' });
@@ -858,6 +860,7 @@ export class P2TransferApp extends LitElement {
 
     const file = item.file;
     let offset = fromOffset;
+    let lastRender = 0;
 
     while (offset < file.size) {
       if (!this.channelReady) {
@@ -872,7 +875,12 @@ export class P2TransferApp extends LitElement {
       this.transfer.sendBinary(chunk);
       offset += chunk.byteLength;
       item.bytesTransferred = offset;
-      this.transfers = [...this.transfers];
+
+      const now = performance.now();
+      if (now - lastRender > 100) {
+        this.transfers = [...this.transfers];
+        lastRender = now;
+      }
     }
 
     this.transfer.sendControl({ kind: 'complete' });
@@ -896,17 +904,21 @@ export class P2TransferApp extends LitElement {
     item.chunkCount = idx + 1;
 
     item.bytesTransferred += buffer.byteLength;
-    this.transfers = [...this.transfers];
 
-    await item.chunkStore.saveMeta({
-      name: item.fileName,
-      size: item.fileSize,
-      type: item.fileType,
-      lastModified: 0,
-      bytesReceived: item.bytesTransferred,
-      chunkCount: item.chunkCount,
-      complete: false
-    });
+    const now = performance.now();
+    if (!this._lastMetaSave || now - this._lastMetaSave > 200) {
+      this.transfers = [...this.transfers];
+      await item.chunkStore.saveMeta({
+        name: item.fileName,
+        size: item.fileSize,
+        type: item.fileType,
+        lastModified: 0,
+        bytesReceived: item.bytesTransferred,
+        chunkCount: item.chunkCount,
+        complete: false
+      });
+      this._lastMetaSave = now;
+    }
   }
 
   private async finishReceive() {
