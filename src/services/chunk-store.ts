@@ -122,29 +122,4 @@ export class ChunkStore {
   }
 }
 
-export async function loadPendingTransfer(): Promise<{ id: string; meta: TransferMeta } | null> {
-  let db: IDBDatabase;
-  try {
-    db = await openDb();
-  } catch {
-    return null;
-  }
 
-  const tx = db.transaction(META_STORE, 'readonly');
-  const store = tx.objectStore(META_STORE);
-
-  return new Promise((resolve) => {
-    const request = store.openCursor();
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) { resolve(null); return; }
-      const meta = cursor.value as TransferMeta;
-      if (!meta.complete && meta.bytesReceived > 0) {
-        resolve({ id: cursor.key as string, meta });
-      } else {
-        cursor.continue();
-      }
-    };
-    request.onerror = () => resolve(null);
-  });
-}

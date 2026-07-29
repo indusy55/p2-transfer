@@ -1,8 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "p2-transfer-signal",
+  "name": "p2-transfer",
   "main": "worker/signaling.js",
   "compatibility_date": "2026-07-29",
+  "assets": {
+    "directory": "dist"
+  },
   "durable_objects": {
     "bindings": [
       {

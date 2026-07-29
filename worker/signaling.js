@@ -20,12 +20,12 @@ export default {
       return json({ ok: true });
     }
 
-    if (url.pathname !== '/signal') {
-      return json({ error: 'not_found' }, 404);
+    if (url.pathname === '/signal') {
+      const id = env.SIGNAL_ROOM.idFromName(ROOM_ID);
+      return env.SIGNAL_ROOM.get(id).fetch(request);
     }
 
-    const id = env.SIGNAL_ROOM.idFromName(ROOM_ID);
-    return env.SIGNAL_ROOM.get(id).fetch(request);
+    return env.ASSETS.fetch(request);
   }
 };
 
@@ -170,12 +170,15 @@ export class SignalRoom {
     const sessionId = this.sessionId(rawSessionId);
     const room = this.rooms.get(code);
 
-    if (!sessionId || (role !== 'sender' && role !== 'receiver')) {
+    const roleMap = { sender: 'sender', receiver: 'receiver', creator: 'sender', joiner: 'receiver' };
+    const normalizedRole = roleMap[role];
+
+    if (!sessionId || !normalizedRole) {
       this.send(ws, { type: 'error', reason: 'INVALID_SESSION' });
       return;
     }
 
-    const participant = room?.[role];
+    const participant = room?.[normalizedRole];
     if (!room || !participant || participant.id !== sessionId) {
       this.send(ws, { type: 'error', reason: 'SESSION_NOT_FOUND' });
       return;
@@ -191,11 +194,11 @@ export class SignalRoom {
 
     participant.socket = ws;
     room.expiresAt = null;
-    this.sockets.set(ws, { roomCode: code, role });
+    this.sockets.set(ws, { roomCode: code, role: normalizedRole });
     await this.persistRoom(code, room);
 
-    const other = role === 'sender' ? room.receiver : room.sender;
-    this.send(ws, { type: 'resumed', code, role, peerPresent: Boolean(other?.socket) });
+    const other = normalizedRole === 'sender' ? room.receiver : room.sender;
+    this.send(ws, { type: 'resumed', code, role: normalizedRole, peerPresent: Boolean(other?.socket) });
     this.notifyPeerReady(room);
   }
 

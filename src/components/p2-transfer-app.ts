@@ -733,18 +733,19 @@ export class P2TransferApp extends LitElement {
 
   private resumeActiveTransfers() {
     const recvItem = this.activeReceiveId ? this.transfers.find(t => t.id === this.activeReceiveId) : null;
-    if (recvItem && recvItem.status === 'paused' && recvItem.bytesTransferred > 0) {
+    if (recvItem && recvItem.bytesTransferred > 0) {
       recvItem.status = 'active';
       this.transfers = [...this.transfers];
       this.statusText = '';
       this.transfer?.sendControl({ kind: 'resume', offset: recvItem.bytesTransferred });
+      return;
+    }
+
+    const sendItem = this.activeSendId ? this.transfers.find(t => t.id === this.activeSendId) : null;
+    if (sendItem && sendItem.status === 'paused') {
+      this.statusText = '已重连，等待对方恢复…';
     } else {
-      const sendItem = this.activeSendId ? this.transfers.find(t => t.id === this.activeSendId) : null;
-      if (sendItem && sendItem.status === 'paused') {
-        this.statusText = '已重连，等待对方恢复…';
-      } else {
-        this.statusText = '';
-      }
+      this.statusText = '';
     }
   }
 
@@ -885,26 +886,27 @@ export class P2TransferApp extends LitElement {
     const item = this.activeReceiveId ? this.transfers.find(t => t.id === this.activeReceiveId) : null;
     if (!item || item.status !== 'active') return;
 
-    if (item.chunkStore) {
-      const idx = item.chunkCount ?? 0;
-      await item.chunkStore.saveChunk(idx, buffer);
-      item.chunkCount = idx + 1;
+    if (!item.chunkStore) {
+      this.statusText = '接收存储未就绪，数据已丢失';
+      return;
     }
+
+    const idx = item.chunkCount ?? 0;
+    await item.chunkStore.saveChunk(idx, buffer);
+    item.chunkCount = idx + 1;
 
     item.bytesTransferred += buffer.byteLength;
     this.transfers = [...this.transfers];
 
-    if (item.chunkStore) {
-      await item.chunkStore.saveMeta({
-        name: item.fileName,
-        size: item.fileSize,
-        type: item.fileType,
-        lastModified: 0,
-        bytesReceived: item.bytesTransferred,
-        chunkCount: item.chunkCount!,
-        complete: false
-      });
-    }
+    await item.chunkStore.saveMeta({
+      name: item.fileName,
+      size: item.fileSize,
+      type: item.fileType,
+      lastModified: 0,
+      bytesReceived: item.bytesTransferred,
+      chunkCount: item.chunkCount,
+      complete: false
+    });
   }
 
   private async finishReceive() {
@@ -1040,14 +1042,17 @@ export class P2TransferApp extends LitElement {
     this.stopReconnect();
     this.closeConnections();
     clearSession();
+    this.peerRole = null;
     this.connectionState = 'idle';
     this.pairCode = '';
     this.joinCode = '';
     this.sessionId = crypto.randomUUID();
     this.statusText = '';
+    this.channelReady = false;
+    this.transfers = [];
+    this.activeSendId = null;
+    this.activeReceiveId = null;
 
-    if (this.peerRole === 'creator') {
-      this.createPairCode();
-    }
+    navigate({ page: 'home' });
   }
 }

@@ -56,16 +56,26 @@ export class WebRtcTransfer {
   }
 
   async waitForBuffer() {
-    if (!this.channel || this.channel.bufferedAmount <= BUFFER_HIGH_WATER) {
-      return;
-    }
+    if (!this.channel || this.channel.readyState !== 'open') return;
+    if (this.channel.bufferedAmount <= BUFFER_HIGH_WATER) return;
 
     await new Promise<void>((resolve) => {
-      const onLow = () => {
-        this.channel?.removeEventListener('bufferedamountlow', onLow);
+      const channel = this.channel;
+      if (!channel || channel.readyState !== 'open') { resolve(); return; }
+
+      const cleanup = () => {
+        channel.removeEventListener('bufferedamountlow', onLow);
+        channel.removeEventListener('close', onClose);
+        channel.removeEventListener('error', onClose);
         resolve();
       };
-      this.channel?.addEventListener('bufferedamountlow', onLow);
+
+      const onLow = () => cleanup();
+      const onClose = () => cleanup();
+
+      channel.addEventListener('bufferedamountlow', onLow, { once: true });
+      channel.addEventListener('close', onClose, { once: true });
+      channel.addEventListener('error', onClose, { once: true });
     });
   }
 
